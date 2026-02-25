@@ -102,9 +102,39 @@ describe("feishu_doc image fetch hardening", () => {
       registerTool,
     } as any);
 
-    const feishuDocTool = registerTool.mock.calls
+    // Tools are now registered as factories; resolve the factory to get the tool
+    const feishuDocFactory = registerTool.mock.calls
       .map((call) => call[0])
-      .find((tool) => tool.name === "feishu_doc");
+      .find((toolOrFactory) => {
+        // Check if it's a factory (function without .name matching a tool name)
+        if (typeof toolOrFactory === "function" && !toolOrFactory.label) {
+          const resolved = toolOrFactory({
+            config: {
+              channels: {
+                feishu: { appId: "app_id", appSecret: "app_secret" },
+              },
+            },
+          });
+          if (resolved && !Array.isArray(resolved) && resolved.name === "feishu_doc") {
+            return true;
+          }
+          return false;
+        }
+        return toolOrFactory.name === "feishu_doc";
+      });
+    expect(feishuDocFactory).toBeDefined();
+
+    // Resolve the factory to get the actual tool
+    const feishuDocTool =
+      typeof feishuDocFactory === "function" && !feishuDocFactory.label
+        ? feishuDocFactory({
+            config: {
+              channels: {
+                feishu: { appId: "app_id", appSecret: "app_secret" },
+              },
+            },
+          })
+        : feishuDocFactory;
     expect(feishuDocTool).toBeDefined();
 
     const result = await feishuDocTool.execute("tool-call", {

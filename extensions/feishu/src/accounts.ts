@@ -142,3 +142,34 @@ export function listEnabledFeishuAccounts(cfg: ClawdbotConfig): ResolvedFeishuAc
     .map((accountId) => resolveFeishuAccount({ cfg, accountId }))
     .filter((account) => account.enabled && account.configured);
 }
+
+/**
+ * Resolve the best Feishu account for a tool context.
+ *
+ * Resolution order:
+ * 1. If `agentAccountId` matches a configured Feishu account, use it
+ * 2. Otherwise, fall back to the first enabled account
+ *
+ * This allows per-agent Feishu app identity when agents are bound
+ * to different Feishu accounts via the `accounts` config.
+ */
+export function resolveFeishuAccountForContext(params: {
+  cfg: ClawdbotConfig;
+  agentAccountId?: string | null;
+}): ResolvedFeishuAccount | null {
+  const accounts = listEnabledFeishuAccounts(params.cfg);
+  if (accounts.length === 0) {
+    return null;
+  }
+
+  // Try matching by agentAccountId
+  if (params.agentAccountId) {
+    const match = accounts.find((a) => a.accountId === params.agentAccountId);
+    if (match) {
+      return match;
+    }
+  }
+
+  // Fall back to first enabled account
+  return accounts[0];
+}
