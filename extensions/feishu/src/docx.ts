@@ -1,8 +1,7 @@
 import { Readable } from "stream";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { Type } from "@sinclair/typebox";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginToolFactory } from "../../../src/plugins/types.js";
+import type { OpenClawPluginApi, OpenClawPluginToolFactory } from "openclaw/plugin-sdk";
 import { listEnabledFeishuAccounts, resolveFeishuAccountForContext } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
 import { FeishuDocSchema, type FeishuDocParams } from "./doc-schema.js";
