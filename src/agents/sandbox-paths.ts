@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, URL } from "node:url";
+import { assertNoHardlinkedFinalPath } from "../infra/hardlink-guards.js";
 import { isNotFoundPathError, isPathInside } from "../infra/path-guards.js";
+import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const HTTP_URL_RE = /^https?:\/\//i;
@@ -13,8 +15,12 @@ function normalizeUnicodeSpaces(str: string): string {
   return str.replace(UNICODE_SPACES, " ");
 }
 
+function normalizeAtPrefix(filePath: string): string {
+  return filePath.startsWith("@") ? filePath.slice(1) : filePath;
+}
+
 function expandPath(filePath: string): string {
-  const normalized = normalizeUnicodeSpaces(filePath);
+  const normalized = normalizeUnicodeSpaces(normalizeAtPrefix(filePath));
   if (normalized === "~") {
     return os.homedir();
   }
@@ -57,10 +63,17 @@ export async function assertSandboxPath(params: {
   cwd: string;
   root: string;
   allowFinalSymlink?: boolean;
+  allowFinalHardlink?: boolean;
 }) {
   const resolved = resolveSandboxPath(params);
   await assertNoSymlinkEscape(resolved.relative, path.resolve(params.root), {
     allowFinalSymlink: params.allowFinalSymlink,
+  });
+  await assertNoHardlinkedFinalPath({
+    filePath: resolved.resolved,
+    root: path.resolve(params.root),
+    boundaryLabel: "sandbox root",
+    allowFinalHardlink: params.allowFinalHardlink,
   });
   return resolved;
 }
@@ -177,12 +190,24 @@ async function resolveAllowedTmpMediaPath(params: {
     return undefined;
   }
   const resolved = path.resolve(resolveSandboxInputPath(params.candidate, params.sandboxRoot));
-  const tmpDir = path.resolve(os.tmpdir());
-  if (!isPathInside(tmpDir, resolved)) {
+  const openClawTmpDir = path.resolve(resolvePreferredOpenClawTmpDir());
+  if (!isPathInside(openClawTmpDir, resolved)) {
     return undefined;
   }
-  await assertNoSymlinkEscape(path.relative(tmpDir, resolved), tmpDir);
+  await assertNoTmpAliasEscape({ filePath: resolved, tmpRoot: openClawTmpDir });
   return resolved;
+}
+
+async function assertNoTmpAliasEscape(params: {
+  filePath: string;
+  tmpRoot: string;
+}): Promise<void> {
+  await assertNoSymlinkEscape(path.relative(params.tmpRoot, params.filePath), params.tmpRoot);
+  await assertNoHardlinkedFinalPath({
+    filePath: params.filePath,
+    root: params.tmpRoot,
+    boundaryLabel: "tmp root",
+  });
 }
 
 async function assertNoSymlinkEscape(

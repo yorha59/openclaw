@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { assertNoHardlinkedFinalPath } from "../../infra/hardlink-guards.js";
 import { isNotFoundPathError, isPathInside } from "../../infra/path-guards.js";
 import { execDockerRaw, type ExecDockerRawResult } from "./docker.js";
 import {
@@ -8,6 +9,7 @@ import {
   type SandboxResolvedFsPath,
   type SandboxFsMount,
 } from "./fs-paths.js";
+import { isPathInsideContainerRoot, normalizeContainerPath } from "./path-utils.js";
 import type { SandboxContext, SandboxWorkspaceAccess } from "./types.js";
 
 type RunCommandOptions = {
@@ -20,6 +22,7 @@ type RunCommandOptions = {
 type PathSafetyOptions = {
   action: string;
   allowFinalSymlink?: boolean;
+  allowFinalHardlink?: boolean;
   requireWritable?: boolean;
 };
 
@@ -150,6 +153,7 @@ class SandboxFsBridgeImpl implements SandboxFsBridge {
       action: "remove files",
       requireWritable: true,
       allowFinalSymlink: true,
+      allowFinalHardlink: true,
     });
     const flags = [params.force === false ? "" : "-f", params.recursive ? "-r" : ""].filter(
       Boolean,
@@ -175,6 +179,7 @@ class SandboxFsBridgeImpl implements SandboxFsBridge {
       action: "rename files",
       requireWritable: true,
       allowFinalSymlink: true,
+      allowFinalHardlink: true,
     });
     await this.assertPathSafety(to, {
       action: "rename files",
@@ -256,6 +261,12 @@ class SandboxFsBridgeImpl implements SandboxFsBridge {
       rootPath: lexicalMount.hostRoot,
       allowFinalSymlink: options.allowFinalSymlink === true,
     });
+    await assertNoHardlinkedFinalPath({
+      filePath: target.hostPath,
+      root: lexicalMount.hostRoot,
+      boundaryLabel: "sandbox mount root",
+      allowFinalHardlink: options.allowFinalHardlink === true,
+    });
 
     const canonicalContainerPath = await this.resolveCanonicalContainerPath({
       containerPath: target.containerPath,
@@ -277,7 +288,7 @@ class SandboxFsBridgeImpl implements SandboxFsBridge {
   private resolveMountByContainerPath(containerPath: string): SandboxFsMount | null {
     const normalized = normalizeContainerPath(containerPath);
     for (const mount of this.mountsByContainer) {
-      if (isPathInsidePosix(normalizeContainerPath(mount.containerRoot), normalized)) {
+      if (isPathInsideContainerRoot(normalizeContainerPath(mount.containerRoot), normalized)) {
         return mount;
       }
     }
@@ -305,7 +316,7 @@ class SandboxFsBridgeImpl implements SandboxFsBridge {
       "done",
       'canonical=$(readlink -f -- "$cursor")',
       'printf "%s%s\\n" "$canonical" "$suffix"',
-    ].join("; ");
+    ].join("\n");
     const result = await this.runCommand(script, {
       args: [params.containerPath, params.allowFinalSymlink ? "1" : "0"],
     });
@@ -349,18 +360,6 @@ function coerceStatType(typeRaw?: string): "file" | "directory" | "other" {
     return "file";
   }
   return "other";
-}
-
-function normalizeContainerPath(value: string): string {
-  const normalized = path.posix.normalize(value);
-  return normalized === "." ? "/" : normalized;
-}
-
-function isPathInsidePosix(root: string, target: string): boolean {
-  if (root === "/") {
-    return true;
-  }
-  return target === root || target.startsWith(`${root}/`);
 }
 
 async function assertNoHostSymlinkEscape(params: {
