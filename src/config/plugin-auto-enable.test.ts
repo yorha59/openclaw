@@ -128,8 +128,8 @@ describe("applyPluginAutoEnable", () => {
       config: {
         auth: {
           profiles: {
-            "google-gemini-cli:default": {
-              provider: "google-gemini-cli",
+            "google-antigravity:default": {
+              provider: "google-antigravity",
               mode: "oauth",
             },
           },
@@ -138,7 +138,7 @@ describe("applyPluginAutoEnable", () => {
       env: {},
     });
 
-    expect(result.config.plugins?.entries?.["google-gemini-cli-auth"]?.enabled).toBe(true);
+    expect(result.config.plugins?.entries?.["google-antigravity-auth"]?.enabled).toBe(true);
   });
 
   it("skips when plugins are globally disabled", () => {

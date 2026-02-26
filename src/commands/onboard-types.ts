@@ -27,6 +27,7 @@ export type AuthChoice =
   | "codex-cli"
   | "apiKey"
   | "gemini-api-key"
+  | "google-antigravity"
   | "google-gemini-cli"
   | "zai-api-key"
   | "zai-coding-global"

@@ -55,7 +55,7 @@ function isProfileConfigCompatible(params: {
 }
 
 function buildOAuthApiKey(provider: string, credentials: OAuthCredentials): string {
-  const needsProjectId = provider === "google-gemini-cli";
+  const needsProjectId = provider === "google-gemini-cli" || provider === "google-antigravity";
   return needsProjectId
     ? JSON.stringify({
         token: credentials.access,

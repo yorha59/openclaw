@@ -63,7 +63,7 @@ const AUTH_CHOICE_GROUP_DEFS: {
     value: "google",
     label: "Google",
     hint: "Gemini API key + OAuth",
-    choices: ["gemini-api-key", "google-gemini-cli"],
+    choices: ["gemini-api-key", "google-antigravity", "google-gemini-cli"],
   },
   {
     value: "xai",
@@ -239,6 +239,11 @@ const BASE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
     hint: "Uses GitHub device flow",
   },
   { value: "gemini-api-key", label: "Google Gemini API key" },
+  {
+    value: "google-antigravity",
+    label: "Google Antigravity OAuth",
+    hint: "Uses the bundled Antigravity auth plugin",
+  },
   {
     value: "google-gemini-cli",
     label: "Google Gemini CLI OAuth",
