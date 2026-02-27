@@ -1,8 +1,9 @@
 import type * as Lark from "@larksuiteoapi/node-sdk";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { listEnabledFeishuAccounts } from "./accounts.js";
+import type { OpenClawPluginApi, OpenClawPluginToolFactory } from "openclaw/plugin-sdk";
+import { listEnabledFeishuAccounts, resolveFeishuAccountForContext } from "./accounts.js";
+import { createFeishuClient } from "./client.js";
 import { FeishuDriveSchema, type FeishuDriveParams } from "./drive-schema.js";
-import { createFeishuToolClient, resolveAnyEnabledFeishuToolsConfig } from "./tool-account.js";
+import { resolveToolsConfig } from "./tools-config.js";
 
 // ============ Helpers ============
 
@@ -179,17 +180,24 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
     return;
   }
 
-  const toolsCfg = resolveAnyEnabledFeishuToolsConfig(accounts);
+  const firstAccount = accounts[0];
+  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
   if (!toolsCfg.drive) {
     api.logger.debug?.("feishu_drive: drive tool disabled in config");
     return;
   }
 
-  type FeishuDriveExecuteParams = FeishuDriveParams & { accountId?: string };
-
   api.registerTool(
-    (ctx) => {
-      const defaultAccountId = ctx.agentAccountId;
+    ((ctx) => {
+      const account = resolveFeishuAccountForContext({
+        cfg: ctx.config ?? api.config,
+        agentAccountId: ctx.agentAccountId,
+      });
+      if (!account) {
+        return null;
+      }
+      const getClient = () => createFeishuClient(account);
+
       return {
         name: "feishu_drive",
         label: "Feishu Drive",
@@ -197,13 +205,9 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
           "Feishu cloud storage operations. Actions: list, info, create_folder, move, delete",
         parameters: FeishuDriveSchema,
         async execute(_toolCallId, params) {
-          const p = params as FeishuDriveExecuteParams;
+          const p = params as FeishuDriveParams;
           try {
-            const client = createFeishuToolClient({
-              api,
-              executeParams: p,
-              defaultAccountId,
-            });
+            const client = getClient();
             switch (p.action) {
               case "list":
                 return json(await listFolder(client, p.folder_token));
@@ -224,7 +228,7 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
           }
         },
       };
-    },
+    }) as OpenClawPluginToolFactory,
     { name: "feishu_drive" },
   );
 

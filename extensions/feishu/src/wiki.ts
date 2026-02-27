@@ -1,7 +1,8 @@
 import type * as Lark from "@larksuiteoapi/node-sdk";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { listEnabledFeishuAccounts } from "./accounts.js";
-import { createFeishuToolClient, resolveAnyEnabledFeishuToolsConfig } from "./tool-account.js";
+import type { OpenClawPluginApi, OpenClawPluginToolFactory } from "openclaw/plugin-sdk";
+import { listEnabledFeishuAccounts, resolveFeishuAccountForContext } from "./accounts.js";
+import { createFeishuClient } from "./client.js";
+import { resolveToolsConfig } from "./tools-config.js";
 import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
 
 // ============ Helpers ============
@@ -167,17 +168,24 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
     return;
   }
 
-  const toolsCfg = resolveAnyEnabledFeishuToolsConfig(accounts);
+  const firstAccount = accounts[0];
+  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
   if (!toolsCfg.wiki) {
     api.logger.debug?.("feishu_wiki: wiki tool disabled in config");
     return;
   }
 
-  type FeishuWikiExecuteParams = FeishuWikiParams & { accountId?: string };
-
   api.registerTool(
-    (ctx) => {
-      const defaultAccountId = ctx.agentAccountId;
+    ((ctx) => {
+      const account = resolveFeishuAccountForContext({
+        cfg: ctx.config ?? api.config,
+        agentAccountId: ctx.agentAccountId,
+      });
+      if (!account) {
+        return null;
+      }
+      const getClient = () => createFeishuClient(account);
+
       return {
         name: "feishu_wiki",
         label: "Feishu Wiki",
@@ -185,13 +193,9 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
           "Feishu knowledge base operations. Actions: spaces, nodes, get, create, move, rename",
         parameters: FeishuWikiSchema,
         async execute(_toolCallId, params) {
-          const p = params as FeishuWikiExecuteParams;
+          const p = params as FeishuWikiParams;
           try {
-            const client = createFeishuToolClient({
-              api,
-              executeParams: p,
-              defaultAccountId,
-            });
+            const client = getClient();
             switch (p.action) {
               case "spaces":
                 return json(await listSpaces(client));
@@ -229,7 +233,7 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
           }
         },
       };
-    },
+    }) as OpenClawPluginToolFactory,
     { name: "feishu_wiki" },
   );
 
